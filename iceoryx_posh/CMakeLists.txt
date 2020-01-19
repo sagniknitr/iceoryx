@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-set(iceoryx_posh_VERSION 0.15.0)
+set(iceoryx_posh_VERSION 0.16.0)
 project(iceoryx_posh VERSION ${iceoryx_posh_VERSION})
 
 find_package(Threads REQUIRED)
@@ -46,7 +46,7 @@ add_library(iceoryx_posh
     source/log/posh_logging.cpp
     source/capro/capro_message.cpp
     source/capro/service_description.cpp
-    source/mepoo/chunk_info.cpp
+    source/mepoo/chunk_header.cpp
     source/mepoo/mepoo_config.cpp
     source/mepoo/segment_config.cpp
     source/mepoo/memory_manager.cpp

@@ -23,6 +23,11 @@ SharedChunk::SharedChunk(ChunkManagement* const f_resource)
 {
 }
 
+SharedChunk::SharedChunk(const relative_ptr<ChunkManagement>& f_resource)
+    : m_chunkManagement(f_resource)
+{
+}
+
 SharedChunk::SharedChunk(const SharedChunk& rhs)
 {
     *this = rhs;
@@ -57,7 +62,7 @@ void SharedChunk::decrementReferenceCounter()
 
 void SharedChunk::freeChunk()
 {
-    m_chunkManagement->m_mempool->freeChunk(m_chunkManagement->m_chunkInfo);
+    m_chunkManagement->m_mempool->freeChunk(m_chunkManagement->m_chunkHeader);
     m_chunkManagement->m_chunkManagementPool->freeChunk(m_chunkManagement);
 }
 
@@ -91,7 +96,7 @@ void* SharedChunk::getPayload() const
     }
     else
     {
-        return m_chunkManagement->m_chunkInfo->m_payload;
+        return m_chunkManagement->m_chunkHeader->payload();
     }
 }
 
@@ -130,11 +135,11 @@ SharedChunk::operator bool() const
     return m_chunkManagement != nullptr;
 }
 
-ChunkInfo* SharedChunk::getChunkInfo() const
+ChunkHeader* SharedChunk::getChunkHeader() const
 {
     if (m_chunkManagement != nullptr)
     {
-        return m_chunkManagement->m_chunkInfo;
+        return m_chunkManagement->m_chunkHeader;
     }
     else
     {
@@ -145,6 +150,13 @@ ChunkInfo* SharedChunk::getChunkInfo() const
 ChunkManagement* SharedChunk::release()
 {
     ChunkManagement* returnValue = m_chunkManagement;
+    m_chunkManagement = nullptr;
+    return returnValue;
+}
+
+iox::relative_ptr<ChunkManagement> SharedChunk::releaseWithRelativePtr()
+{
+    auto returnValue = m_chunkManagement;
     m_chunkManagement = nullptr;
     return returnValue;
 }

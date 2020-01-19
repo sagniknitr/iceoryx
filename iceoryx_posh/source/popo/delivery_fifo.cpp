@@ -20,10 +20,12 @@ namespace popo
 {
 bool DeliveryFiFo::pop(mepoo::SharedChunk& chunk)
 {
-    mepoo::ChunkManagement* chunkManagement;
-    bool retVal = m_fifo.pop(chunkManagement);
+    DeliveryFiFo::ChunkManagementTransport chunkTransport;
+    bool retVal = m_fifo.pop(chunkTransport);
     if (retVal == true)
     {
+        auto chunkManagement =
+            iox::relative_ptr<mepoo::ChunkManagement>(chunkTransport.m_chunkOffset, chunkTransport.m_segmentId);
         chunk = mepoo::SharedChunk(chunkManagement);
     }
     return retVal;
@@ -31,10 +33,15 @@ bool DeliveryFiFo::pop(mepoo::SharedChunk& chunk)
 
 bool DeliveryFiFo::push(mepoo::SharedChunk&& chunkIn, mepoo::SharedChunk& chunkOut)
 {
-    mepoo::ChunkManagement* chunkManagement;
-    bool retVal = m_fifo.push(chunkIn.release(), chunkManagement);
+    DeliveryFiFo::ChunkManagementTransport chunkTransportIn(chunkIn.releaseWithRelativePtr());
+    DeliveryFiFo::ChunkManagementTransport chunkTransportOut;
+
+    bool retVal = m_fifo.push(std::move(chunkTransportIn), chunkTransportOut);
+
     if (retVal == false)
     {
+        auto chunkManagement =
+            iox::relative_ptr<mepoo::ChunkManagement>(chunkTransportOut.m_chunkOffset, chunkTransportOut.m_segmentId);
         chunkOut = mepoo::SharedChunk(chunkManagement);
     }
     return retVal;
@@ -48,6 +55,16 @@ bool DeliveryFiFo::empty() const
 bool DeliveryFiFo::resize(const uint32_t f_size)
 {
     return m_fifo.resize(f_size);
+}
+
+uint64_t DeliveryFiFo::getCapacity() const
+{
+    return m_fifo.capacity();
+}
+
+uint64_t DeliveryFiFo::getSize() const
+{
+    return m_fifo.size();
 }
 
 } // namespace popo

@@ -17,6 +17,7 @@
 #include "iceoryx_utils/cxx/helplets.hpp"
 #include "iceoryx_utils/cxx/smart_c.hpp"
 #include "iceoryx_utils/design_pattern/creation.hpp"
+#include "iceoryx_utils/internal/relocatable_pointer/relative_ptr.hpp"
 
 #include <cstring>
 #include <fcntl.h>
@@ -122,7 +123,7 @@ class Semaphore : public DesignPattern::Creation<Semaphore, SemaphoreError>
     ///
     /// sem_timedwait() is the same as sem_wait(), except that abs_timeout
     /// specifies a limit on the amount of time that the call should block if
-    /// the decrement cannot be immediately performed.  The abs_time‐ out
+    /// the decrement cannot be immediately performed.  The abs_time_out
     /// argument points to a structure that specifies an absolute timeout in
     /// seconds and nanoseconds since the Epoch, 1970-01-01 00:00:00 +0000
     /// (UTC).  This structure is defined as follows:
@@ -156,7 +157,7 @@ class Semaphore : public DesignPattern::Creation<Semaphore, SemaphoreError>
     bool m_isShared = false;
 
     mutable sem_t m_handle;
-    mutable sem_t* m_handlePtr = &m_handle;
+    mutable iox::relative_ptr<sem_t> m_handlePtr = &m_handle;
 
   private:
     friend class DesignPattern::Creation<Semaphore, SemaphoreError>;

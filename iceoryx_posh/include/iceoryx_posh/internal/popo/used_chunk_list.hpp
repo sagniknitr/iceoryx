@@ -16,7 +16,8 @@
 
 #include "iceoryx_posh/internal/mepoo/chunk_management.hpp"
 #include "iceoryx_posh/internal/mepoo/shared_chunk.hpp"
-#include "iceoryx_posh/mepoo/chunk_info.hpp"
+#include "iceoryx_posh/mepoo/chunk_header.hpp"
+#include "iceoryx_utils/internal/relocatable_pointer/relative_ptr.hpp"
 
 #include <array>
 #include <atomic>
@@ -64,7 +65,7 @@ class UsedChunkList
     }
 
     // only from runtime context
-    bool remove(const mepoo::ChunkInfo* f_chunkInfo, mepoo::SharedChunk& f_chunk)
+    bool remove(const mepoo::ChunkHeader* f_chunkHeader, mepoo::SharedChunk& f_chunk)
     {
         uint32_t previous = InvalidIndex;
 
@@ -72,7 +73,7 @@ class UsedChunkList
         for (uint32_t current = m_usedListHead; current != InvalidIndex; current = m_list[current])
         {
             // does the entry match the one we want to remove?
-            if (m_data[current] != nullptr && m_data[current]->m_chunkInfo == f_chunkInfo)
+            if (m_data[current] != nullptr && m_data[current]->m_chunkHeader == f_chunkHeader)
             {
                 // return the chunk mgmt entry as SharedChunk object
                 f_chunk = mepoo::SharedChunk(m_data[current]);
@@ -115,8 +116,10 @@ class UsedChunkList
 
         for (auto& data : m_data)
         {
-            //@todo check if data is nullptr
-            mepoo::SharedChunk{data};
+            if (data != nullptr)
+            {
+                mepoo::SharedChunk{data};
+            }
         }
 
         init(); // just to save us from the future self
@@ -158,7 +161,7 @@ class UsedChunkList
     uint32_t m_usedListHead{InvalidIndex};
     uint32_t m_freeListHead{0u};
     std::array<uint32_t, Size> m_list;
-    std::array<mepoo::ChunkManagement*, Size> m_data;
+    std::array<relative_ptr<mepoo::ChunkManagement>, Size> m_data;
 };
 
 } // namespace popo

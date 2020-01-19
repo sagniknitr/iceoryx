@@ -18,6 +18,8 @@
 #include "iceoryx_posh/internal/log/posh_logging.hpp"
 #include "iceoryx_posh/internal/runtime/message_queue_message.hpp"
 #include "iceoryx_posh/runtime/runnable.hpp"
+#include "iceoryx_utils/cxx/convert.hpp"
+#include "iceoryx_utils/internal/relocatable_pointer/relative_ptr.hpp"
 #include "iceoryx_utils/posix_wrapper/timer.hpp"
 
 #include <cstdint>
@@ -44,30 +46,16 @@ PoshRuntime& PoshRuntime::getInstance(const std::string& name) noexcept
 
 PoshRuntime::PoshRuntime(const std::string& name, const bool doMapSharedMemoryIntoThread) noexcept
     : m_appName(verifyInstanceName(name))
-    , m_kaThread_run(true)
     , m_MqInterface(MQ_ROUDI_NAME, name, PROCESS_WAITING_FOR_ROUDI_TIMEOUT)
     , m_ShmInterface(m_MqInterface.getShmBaseAddr(),
                      doMapSharedMemoryIntoThread,
                      m_MqInterface.getShmTopicSize(),
-                     m_MqInterface.getSegmentManagerAddr())
+                     m_MqInterface.getSegmentManagerAddr(),
+                     m_MqInterface.getSegmentId())
     , m_applicationPort(getMiddlewareApplication(Interfaces::INTERNAL))
 {
-    // start thread after shm-interface was initialized & 'this'-pointer is finally valid
-    // if started earlier we run into alive-messages at the roudi before the app is connected :-(
-    m_kaThread = std::thread(&PoshRuntime::threadKeepaliveMain, this);
-    // set thread name
-    pthread_setname_np(m_kaThread.native_handle(), "KeepAlive");
-
+    m_keepAliveTimer.start(posix::Timer::RunMode::PERIODIC);
     /// @todo here we could get the LogLevel and LogMode and set it on the LogManager
-}
-
-PoshRuntime::~PoshRuntime() noexcept
-{
-    m_kaThread_run = false;
-    if (m_kaThread.joinable())
-    {
-        m_kaThread.join();
-    }
 }
 
 const std::string& PoshRuntime::verifyInstanceName(const std::string& name) noexcept
@@ -102,23 +90,27 @@ const std::atomic<uint64_t>* PoshRuntime::getServiceRegistryChangeCounter() noex
     MqMessage sendBuffer;
     sendBuffer << mqMessageTypeToString(MqMessageType::SERVICE_REGISTRY_CHANGE_COUNTER) << m_appName;
     MqMessage receiveBuffer;
-    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (1 == receiveBuffer.getNumberOfElements()))
+    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (2 == receiveBuffer.getNumberOfElements()))
     {
-        const std::atomic<uint64_t>* counter = const_cast<const std::atomic<uint64_t>*>(
-            reinterpret_cast<std::atomic<uint64_t>*>(std::stoul(receiveBuffer.getElementAtIndex(0))));
-        return counter;
+        RelativePointer::offset_t offset;
+        cxx::convert::fromString(receiveBuffer.getElementAtIndex(0).c_str(), offset);
+        RelativePointer::id_t segmentId;
+        cxx::convert::fromString(receiveBuffer.getElementAtIndex(1).c_str(), segmentId);
+        auto ptr = RelativePointer::getPtr(segmentId, offset);
+
+        return reinterpret_cast<std::atomic<uint64_t>*>(ptr);
     }
     else
     {
-        LogError() << "unable to request service registry change counter caused by wrong response from roudi :\""
-                   << sendBuffer.getMessage() << "\"";
+        LogError() << "unable to request service registry change counter caused by wrong response from RouDi: \""
+                   << receiveBuffer.getMessage() << "\" with request: \"" << sendBuffer.getMessage() << "\"";
         return nullptr;
     }
 }
 
 SenderPortType::MemberType_t* PoshRuntime::getMiddlewareSender(const capro::ServiceDescription& service,
-                                                                   const Interfaces interface,
-                                                                   const cxx::CString100& runnableName) noexcept
+                                                               const Interfaces interface,
+                                                               const cxx::CString100& runnableName) noexcept
 {
     MqMessage sendBuffer;
     sendBuffer << mqMessageTypeToString(MqMessageType::IMPL_SENDER) << m_appName
@@ -131,16 +123,19 @@ SenderPortType::MemberType_t* PoshRuntime::getMiddlewareSender(const capro::Serv
 SenderPortType::MemberType_t* PoshRuntime::requestSenderFromRoudi(const MqMessage& sendBuffer) noexcept
 {
     MqMessage receiveBuffer;
-    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (2 == receiveBuffer.getNumberOfElements()))
+    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (3 == receiveBuffer.getNumberOfElements()))
     {
         std::string mqMessage = receiveBuffer.getElementAtIndex(0);
 
         if (stringToMqMessageType(mqMessage.c_str()) == MqMessageType::IMPL_SENDER_ACK)
 
         {
-            SenderPortType::MemberType_t* sender =
-                reinterpret_cast<SenderPortType::MemberType_t*>(std::stoll(receiveBuffer.getElementAtIndex(1)));
-            return sender;
+            RelativePointer::id_t segmentId;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(2).c_str(), segmentId);
+            RelativePointer::offset_t offset;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(1).c_str(), offset);
+            auto ptr = RelativePointer::getPtr(segmentId, offset);
+            return reinterpret_cast<SenderPortType::MemberType_t*>(ptr);
         }
         else
         {
@@ -158,8 +153,8 @@ SenderPortType::MemberType_t* PoshRuntime::requestSenderFromRoudi(const MqMessag
 }
 
 ReceiverPortType::MemberType_t* PoshRuntime::getMiddlewareReceiver(const capro::ServiceDescription& service,
-                                                                       const Interfaces interface,
-                                                                       const cxx::CString100& runnableName) noexcept
+                                                                   const Interfaces interface,
+                                                                   const cxx::CString100& runnableName) noexcept
 {
     MqMessage sendBuffer;
     sendBuffer << mqMessageTypeToString(MqMessageType::IMPL_RECEIVER) << m_appName
@@ -172,15 +167,18 @@ ReceiverPortType::MemberType_t* PoshRuntime::getMiddlewareReceiver(const capro::
 ReceiverPortType::MemberType_t* PoshRuntime::requestReceiverFromRoudi(const MqMessage& sendBuffer) noexcept
 {
     MqMessage receiveBuffer;
-    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (2 == receiveBuffer.getNumberOfElements()))
+    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (3 == receiveBuffer.getNumberOfElements()))
     {
         std::string mqMessage = receiveBuffer.getElementAtIndex(0);
 
         if (stringToMqMessageType(mqMessage.c_str()) == MqMessageType::IMPL_RECEIVER_ACK)
         {
-            ReceiverPortType::MemberType_t* receiver =
-                reinterpret_cast<ReceiverPortType::MemberType_t*>(std::stoll(receiveBuffer.getElementAtIndex(1)));
-            return receiver;
+            RelativePointer::id_t segmentId;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(2).c_str(), segmentId);
+            RelativePointer::offset_t offset;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(1).c_str(), offset);
+            auto ptr = RelativePointer::getPtr(segmentId, offset);
+            return reinterpret_cast<ReceiverPortType::MemberType_t*>(ptr);
         }
         else
         {
@@ -198,7 +196,7 @@ ReceiverPortType::MemberType_t* PoshRuntime::requestReceiverFromRoudi(const MqMe
 }
 
 popo::InterfacePortData* PoshRuntime::getMiddlewareInterface(const Interfaces interface,
-                                                                 const cxx::CString100& runnableName) noexcept
+                                                             const cxx::CString100& runnableName) noexcept
 {
     MqMessage sendBuffer;
     sendBuffer << mqMessageTypeToString(MqMessageType::IMPL_INTERFACE) << m_appName << static_cast<uint32_t>(interface)
@@ -206,15 +204,18 @@ popo::InterfacePortData* PoshRuntime::getMiddlewareInterface(const Interfaces in
 
     MqMessage receiveBuffer;
 
-    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (2 == receiveBuffer.getNumberOfElements()))
+    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (3 == receiveBuffer.getNumberOfElements()))
     {
         std::string mqMessage = receiveBuffer.getElementAtIndex(0);
 
         if (stringToMqMessageType(mqMessage.c_str()) == MqMessageType::IMPL_INTERFACE_ACK)
         {
-            popo::InterfacePortData* port =
-                reinterpret_cast<popo::InterfacePortData*>(std::stoll(receiveBuffer.getElementAtIndex(1)));
-            return port;
+            RelativePointer::id_t segmentId;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(2).c_str(), segmentId);
+            RelativePointer::offset_t offset;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(1).c_str(), offset);
+            auto ptr = RelativePointer::getPtr(segmentId, offset);
+            return reinterpret_cast<popo::InterfacePortData*>(ptr);
         }
         else
         {
@@ -239,14 +240,18 @@ RunnableData* PoshRuntime::createRunnable(const RunnableProperty& runnableProper
 
     MqMessage receiveBuffer;
 
-    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (2 == receiveBuffer.getNumberOfElements()))
+    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (3 == receiveBuffer.getNumberOfElements()))
     {
         std::string mqMessage = receiveBuffer.getElementAtIndex(0);
 
         if (stringToMqMessageType(mqMessage.c_str()) == MqMessageType::CREATE_RUNNABLE_ACK)
         {
-            RunnableData* port = reinterpret_cast<RunnableData*>(std::stoll(receiveBuffer.getElementAtIndex(1)));
-            return port;
+            RelativePointer::id_t segmentId;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(2).c_str(), segmentId);
+            RelativePointer::offset_t offset;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(1).c_str(), offset);
+            auto ptr = RelativePointer::getPtr(segmentId, offset);
+            return reinterpret_cast<RunnableData*>(ptr);
         }
         else
         {
@@ -279,7 +284,7 @@ void PoshRuntime::removeRunnable(const Runnable& runnable) noexcept
 }
 
 void PoshRuntime::findService(const capro::ServiceDescription& serviceDescription,
-                                  InstanceContainer& instanceContainer) noexcept
+                              InstanceContainer& instanceContainer) noexcept
 {
     MqMessage sendBuffer;
     sendBuffer << mqMessageTypeToString(MqMessageType::FIND_SERVICE) << m_appName
@@ -323,15 +328,18 @@ popo::ApplicationPortData* PoshRuntime::getMiddlewareApplication(Interfaces inte
 
     MqMessage receiveBuffer;
 
-    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (2 == receiveBuffer.getNumberOfElements()))
+    if (sendRequestToRouDi(sendBuffer, receiveBuffer) && (3 == receiveBuffer.getNumberOfElements()))
     {
         std::string mqMessage = receiveBuffer.getElementAtIndex(0);
 
         if (stringToMqMessageType(mqMessage.c_str()) == MqMessageType::IMPL_APPLICATION_ACK)
         {
-            popo::ApplicationPortData* port =
-                reinterpret_cast<popo::ApplicationPortData*>(std::stoll(receiveBuffer.getElementAtIndex(1)));
-            return port;
+            RelativePointer::id_t segmentId;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(2).c_str(), segmentId);
+            RelativePointer::offset_t offset;
+            cxx::convert::fromString(receiveBuffer.getElementAtIndex(1).c_str(), offset);
+            auto ptr = RelativePointer::getPtr(segmentId, offset);
+            return reinterpret_cast<popo::ApplicationPortData*>(ptr);
         }
         else
         {
@@ -362,25 +370,14 @@ bool PoshRuntime::sendMessageToRouDi(const MqMessage& msg) noexcept
     return m_MqInterface.sendMessageToRouDi(msg);
 }
 
-void PoshRuntime::threadKeepaliveMain() noexcept
+// this is the callback for the m_keepAliveTimer
+void PoshRuntime::sendKeepAlive() noexcept
 {
-    static_assert(PROCESS_KEEP_ALIVE_INTERVAL > DISCOVERY_INTERVAL, "Keep alive interval too small");
-
-    posix::Timer osTimer(PROCESS_KEEP_ALIVE_INTERVAL, [&]() {
-        if (!m_MqInterface.sendKeepalive())
-        {
-            LogWarn() << "Error in sending keep alive";
-        }
-    });
-
-    // Start the timer periodically
-    osTimer.start(true);
-
-    while (m_kaThread_run)
+    if (!m_MqInterface.sendKeepalive())
     {
-        std::this_thread::sleep_for(std::chrono::milliseconds(DISCOVERY_INTERVAL.milliSeconds<int64_t>()));
+        LogWarn() << "Error in sending keep alive";
     }
-} // namespace runtime
+}
 
 } // namespace runtime
 } // namespace iox

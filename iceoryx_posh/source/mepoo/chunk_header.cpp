@@ -12,21 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "iceoryx_posh/mepoo/chunk_info.hpp"
+#include "iceoryx_posh/mepoo/chunk_header.hpp"
 #include "iceoryx_posh/internal/mepoo/mem_pool.hpp"
 
 namespace iox
 {
 namespace mepoo
 {
-ChunkInfo::ChunkInfo() noexcept
-    : m_payload(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(this) + sizeof(ChunkInfo)))
+ChunkHeader::ChunkHeader() noexcept
 {
 }
 
-ChunkInfo* convertPayloadPointerToChunkInfo(void* const payload) noexcept
+ChunkHeader* convertPayloadPointerToChunkHeader(void* const payload) noexcept
 {
-    return reinterpret_cast<ChunkInfo*>(reinterpret_cast<uintptr_t>(payload) - sizeof(ChunkInfo));
+    return reinterpret_cast<ChunkHeader*>(reinterpret_cast<uintptr_t>(payload) - sizeof(ChunkHeader));
 }
 
 } // namespace mepoo

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "test.hpp"
 #include "iceoryx_posh/internal/mepoo/memory_manager.hpp"
-#include "iceoryx_posh/mepoo/chunk_info.hpp"
 #include "iceoryx_posh/internal/mepoo/shared_pointer.hpp"
+#include "iceoryx_posh/mepoo/chunk_header.hpp"
 #include "iceoryx_utils/internal/posix_wrapper/shared_memory_object/allocator.hpp"
+#include "iceoryx_utils/internal/relocatable_pointer/relative_ptr.hpp"
+#include "test.hpp"
 
 using namespace ::testing;
 
@@ -99,16 +100,18 @@ class SharedPointer_Test : public Test
 
     void SetUp() override
     {
+        iox::RelativePointer::registerPtr(memory, 4096);
     }
     void TearDown() override
     {
+        iox::RelativePointer::unregisterAll();
     }
 
     ChunkManagement* GetChunkManagement(void* memoryChunk)
     {
         ChunkManagement* v = static_cast<ChunkManagement*>(chunkMgmtPool.getChunk());
-        ChunkInfo* chunkInfo = new (memoryChunk) ChunkInfo();
-        new (v) ChunkManagement{chunkInfo, &mempool, &chunkMgmtPool};
+        ChunkHeader* chunkHeader = new (memoryChunk) ChunkHeader();
+        new (v) ChunkManagement{chunkHeader, &mempool, &chunkMgmtPool};
         return v;
     }
 

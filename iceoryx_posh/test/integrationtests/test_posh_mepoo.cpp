@@ -190,8 +190,9 @@ class Mepoo_IntegrationTest : public Test
     void getMempoolInfoFromIntrospection(MemPoolInfoContainer& mempoolInfo)
     {
         auto currentUser = iox::posix::PosixUser::getUserOfCurrentProcess();
-        auto memoryManager = m_roudiEnv->m_roudiApp->m_mempoolIntrospection.m_segmentManager->getMemoryManagerForUser(
-            currentUser.getName());
+        auto memoryManager = m_roudiEnv->m_roudiApp->m_mempoolIntrospection.m_segmentManager
+                                 ->getSegmentInformationForUser(currentUser.getName())
+                                 .m_memoryManager;
         m_roudiEnv->m_roudiApp->m_mempoolIntrospection.copyMemPoolInfo(*memoryManager, mempoolInfo);
 
         // internally, the chunks are adjusted to the additional management information;
@@ -200,7 +201,7 @@ class Mepoo_IntegrationTest : public Test
         {
             if (mempool.m_chunkSize != 0)
             {
-                mempool.m_chunkSize = mempool.m_chunkSize - sizeof(iox::mepoo::ChunkInfo);
+                mempool.m_chunkSize = mempool.m_chunkSize - static_cast<uint32_t>(sizeof(iox::mepoo::ChunkHeader));
             }
         }
     }
@@ -246,8 +247,8 @@ class Mepoo_IntegrationTest : public Test
         for (int idx = 0; idx < times; ++idx)
         {
             auto sample = senderPort.reserveChunk(topicSize);
-            new (sample->m_payload) Topic;
-            sample->m_payloadSize = topicSize;
+            new (sample->payload()) Topic;
+            sample->m_info.m_payloadSize = topicSize;
             senderPort.deliverChunk(sample);
             m_roudiEnv->InterOpWait();
         }

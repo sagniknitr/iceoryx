@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "test.hpp"
 #include "iceoryx_utils/posix_wrapper/timer.hpp"
+#include "test.hpp"
 
+#include <atomic>
 #include <thread>
 
 using namespace ::testing;
 
 using namespace iox::units::duration_literals;
+
+using Timer = iox::posix::Timer;
 
 class Timer_test : public Test
 {
@@ -35,18 +38,18 @@ class Timer_test : public Test
 
     iox::units::Duration second{1_s};
 
-    int numberOfCalls{0};
+    std::atomic<int> numberOfCalls{0};
 };
 
-TEST_F(Timer_test, CreateAndFireOnce)
+TEST_F(Timer_test, DISABLED_CreateAndFireOnce_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(second, [&]() { numberOfCalls++; });
+    Timer osTimer(second, [&]() { numberOfCalls++; });
 
     EXPECT_THAT(osTimer.hasError(), Eq(false));
 
     // Save the time before start()
-    auto start = osTimer.now();
-    osTimer.start();
+    auto start = Timer::now();
+    osTimer.start(Timer::RunMode::ONCE);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(1100));
 
@@ -63,13 +66,13 @@ TEST_F(Timer_test, CreateAndFireOnce)
     osTimer.stop();
 }
 
-TEST_F(Timer_test, CreateAndStop)
+TEST_F(Timer_test, DISABLED_CreateAndStop_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(second, [&]() { numberOfCalls++; });
+    Timer osTimer(second, [&]() { numberOfCalls++; });
 
     EXPECT_THAT(osTimer.hasError(), Eq(false));
 
-    osTimer.start();
+    osTimer.start(Timer::RunMode::ONCE);
 
     // Stop the timer and wait to make sure it does not fire
     osTimer.stop();
@@ -78,14 +81,14 @@ TEST_F(Timer_test, CreateAndStop)
 
     EXPECT_THAT(numberOfCalls, Eq(0));
 }
-TEST_F(Timer_test, CreateAndFirePeriodically)
+TEST_F(Timer_test, DISABLED_CreateAndFirePeriodically_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(second, [&]() { numberOfCalls++; });
+    Timer osTimer(second, [&]() { numberOfCalls++; });
 
     EXPECT_THAT(osTimer.hasError(), Eq(false));
 
     auto start = osTimer.now();
-    osTimer.start(true);
+    osTimer.start(Timer::RunMode::PERIODIC);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(3200));
 
@@ -101,13 +104,13 @@ TEST_F(Timer_test, CreateAndFirePeriodically)
 
     EXPECT_THAT(numberOfCalls, Eq(3));
 }
-TEST_F(Timer_test, CreateAndGetTimeUntilExpiration)
+TEST_F(Timer_test, DISABLED_CreateAndGetTimeUntilExpiration_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(second, [&]() { numberOfCalls++; });
+    Timer osTimer(second, [&]() { numberOfCalls++; });
 
     EXPECT_THAT(osTimer.hasError(), Eq(false));
 
-    osTimer.start(true);
+    osTimer.start(Timer::RunMode::PERIODIC);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
 
@@ -120,24 +123,24 @@ TEST_F(Timer_test, CreateAndGetTimeUntilExpiration)
     osTimer.stop();
 }
 
-TEST_F(Timer_test, CreateFirePeriodicallyAndGetoverruns)
+TEST_F(Timer_test, DISABLED_CreateFirePeriodicallyAndGetoverruns_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(50_ms, [&]() { numberOfCalls++; });
+    Timer osTimer(50_ms, [&]() { numberOfCalls++; });
 
     EXPECT_THAT(osTimer.hasError(), Eq(false));
 
-    osTimer.start(false);
+    osTimer.start(Timer::RunMode::ONCE);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     auto overruns = osTimer.getOverruns();
 
-    // See if an overruns occured between time and actual callback from the operating system
-    EXPECT_THAT(overruns.get_value(), Eq(0));
+    // See if an overruns occurred between time and actual callback from the operating system
+    EXPECT_THAT(overruns.get_value(), Eq(0u));
 }
-TEST_F(Timer_test, CreateAndCallExpired)
+TEST_F(Timer_test, CreateAndCallExpired_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(second);
+    Timer osTimer(second);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     EXPECT_THAT(osTimer.hasExpiredComparedToCreationTime(), Eq(false));
@@ -145,31 +148,35 @@ TEST_F(Timer_test, CreateAndCallExpired)
     std::this_thread::sleep_for(std::chrono::milliseconds(600));
     EXPECT_THAT(osTimer.hasExpiredComparedToCreationTime(), Eq(true));
 }
-TEST_F(Timer_test, CreateAndRestart)
+TEST_F(Timer_test, DISABLED_CreateAndRestart_PERFORMANCETEST42)
 {
-    iox::posix::Timer osTimer(second, [&]() { numberOfCalls++; });
+    Timer osTimer(second, [&]() { numberOfCalls++; });
 
     EXPECT_THAT(osTimer.hasError(), Eq(false));
 
     auto start = osTimer.now();
 
-    osTimer.start(false);
+    osTimer.start(Timer::RunMode::ONCE);
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1100));
 
     auto end = osTimer.now();
 
     auto timediff = end.get_value() - start.get_value();
 
     // Just check for magnitude, allow up to 10% jitter for Jenkins and VMs
-    EXPECT_LE(timediff, 1.1_s);
+    EXPECT_LE(timediff, 1.2_s);
 
     start = osTimer.now();
-    osTimer.restart(2_s);
+
+    EXPECT_THAT(numberOfCalls, Eq(1));
+
+    osTimer.restart(2_s, Timer::RunMode::ONCE);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(2100));
 
     end = osTimer.now();
+    osTimer.stop();
 
     timediff = end.get_value() - start.get_value();
 
@@ -177,6 +184,4 @@ TEST_F(Timer_test, CreateAndRestart)
     EXPECT_LE(timediff, 2.2_s);
 
     EXPECT_THAT(numberOfCalls, Eq(2));
-
-    osTimer.stop();
 }

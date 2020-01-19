@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-set(iceoryx_utils_VERSION 0.15.0)
+set(iceoryx_utils_VERSION 0.16.0)
 project(iceoryx_utils VERSION ${iceoryx_utils_VERSION})
 
 add_compile_options(-fPIC)
@@ -79,6 +79,7 @@ if(GTest_FOUND) # only GTest_FOUND, just in case someone want's to use iceoryx_u
     )
 
     target_link_libraries(iceoryx_utils_testing PRIVATE
+        ${CODE_COVERAGE_LIBS}
         iceoryx_utils
         GTest::gtest
         GTest::gmock
@@ -149,6 +150,7 @@ add_library(iceoryx_utils
     source/posix_wrapper/system_configuration.cpp
     source/posix_wrapper/posix_access_rights.cpp
     source/units/duration.cpp
+    source/relocatable_pointer/relative_ptr.cpp
 )
 
 add_library(iceoryx_utils::iceoryx_utils ALIAS iceoryx_utils)
@@ -166,7 +168,7 @@ target_compile_options(iceoryx_utils PUBLIC -std=c++11)
 target_compile_options(iceoryx_utils PUBLIC -fPIC)
 
 if(NOT CMAKE_SYSTEM_NAME MATCHES QNX)
-    target_link_libraries(iceoryx_utils PRIVATE acl)
+    target_link_libraries(iceoryx_utils PRIVATE acl ${CODE_COVERAGE_LIBS})
 endif(NOT CMAKE_SYSTEM_NAME MATCHES QNX)
 
 if(NOT CMAKE_SYSTEM_NAME MATCHES QNX)
