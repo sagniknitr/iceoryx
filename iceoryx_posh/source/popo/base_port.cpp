@@ -18,7 +18,7 @@ namespace iox
 {
 namespace popo
 {
-std::atomic<uint64_t> BasePort::MemberType_t::s_uniqueIdCounter{1};
+std::atomic<uint64_t> BasePort::MemberType_t::s_uniqueIdCounter{1u};
 
 BasePort::BasePort(BasePortData* const f_basePortDataPtr) noexcept
     : m_basePortDataPtr(f_basePortDataPtr)
@@ -59,11 +59,6 @@ cxx::CString100 BasePort::getApplicationName() const noexcept
     return getMembers()->m_processName;
 }
 
-Interfaces BasePort::getInterface() const noexcept
-{
-    return getMembers()->m_interface;
-}
-
 uint64_t BasePort::getUniqueID() const noexcept
 {
     return getMembers()->m_uniqueId.load(std::memory_order_relaxed);
@@ -74,5 +69,16 @@ BasePort::operator bool() const
     return m_basePortDataPtr != nullptr;
 }
 
+void BasePort::destroy() noexcept
+{
+    getMembers()->m_toBeDestroyed.store(true, std::memory_order_relaxed);
+}
+
+bool BasePort::toBeDestroyed() const noexcept
+{
+    return getMembers()->m_toBeDestroyed.load(std::memory_order_relaxed);
+}
+
 } // namespace popo
 } // namespace iox
+

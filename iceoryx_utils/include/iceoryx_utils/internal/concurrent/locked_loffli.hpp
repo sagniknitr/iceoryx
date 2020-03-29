@@ -33,7 +33,7 @@ class LockedLoFFLi
     uint32_t* m_freeIndices{nullptr};
 
     using mutex_t = posix::mutex;
-    mutable cxx::optional<mutex_t> m_accessMutex = posix::mutex::CreateMutex(false);
+    mutable mutex_t m_accessMutex{false};
 
     uint32_t m_invalidIndex{0};
 
@@ -59,7 +59,7 @@ class LockedLoFFLi
     /// @return the required memory size for a free-list with f_size elements
     static inline constexpr std::size_t requiredMemorySize(const uint32_t f_size)
     {
-        return (static_cast<size_t>(f_size) + 1) * sizeof(uint32_t);
+        return (static_cast<size_t>(f_size) + 1u) * sizeof(uint32_t);
     }
 };
 

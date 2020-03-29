@@ -43,17 +43,17 @@ uint32_t MqMessage::getNumberOfElements() const noexcept
 std::string MqMessage::getElementAtIndex(const uint32_t index) const noexcept
 {
     std::string messageRemainder(m_msg);
-    size_t startPos = 0;
+    size_t startPos = 0u;
     size_t endPos = messageRemainder.find_first_of(m_separator, startPos);
 
-    for (uint32_t counter = 0; endPos != std::string::npos; ++counter)
+    for (uint32_t counter = 0u; endPos != std::string::npos; ++counter)
     {
         if (counter == index)
         {
             return messageRemainder.substr(startPos, endPos - startPos);
         }
 
-        startPos = endPos + 1;
+        startPos = endPos + 1u;
         endPos = messageRemainder.find_first_of(m_separator, startPos);
     }
 
@@ -84,21 +84,21 @@ void MqMessage::setMessage(const std::string& msg) noexcept
     clearMessage();
 
     m_msg = msg;
-    if (m_msg.back() != m_separator && m_msg.size() > 0)
+    if (!m_msg.empty() && m_msg.back() != m_separator)
     {
         m_isValid = false;
     }
     else
     {
-        m_numberOfElements = static_cast<uint32_t>(
-            std::count_if(m_msg.begin(), m_msg.end(), [&](char c) { return c == m_separator; }));
+        m_numberOfElements =
+            static_cast<uint32_t>(std::count_if(m_msg.begin(), m_msg.end(), [&](char c) { return c == m_separator; }));
     }
 }
 
 void MqMessage::clearMessage() noexcept
 {
     m_msg.clear();
-    m_numberOfElements = 0;
+    m_numberOfElements = 0u;
     m_isValid = true;
 }
 

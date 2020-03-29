@@ -14,16 +14,17 @@
 
 #include "iceoryx_posh/roudi/iceoryx_roudi_app.hpp"
 
+#include "iceoryx_posh/internal/roudi/roudi_multi_process.hpp"
+#include "iceoryx_posh/roudi/iceoryx_roudi_components.hpp"
 #include "iceoryx_utils/cxx/helplets.hpp"
 #include "iceoryx_utils/cxx/optional.hpp"
-#include "iceoryx_posh/internal/roudi/roudi_multi_process.hpp"
 
 namespace iox
 {
 namespace roudi
 {
-IceOryxRouDiApp::IceOryxRouDiApp(int argc, char* argv[], const RouDiConfig_t& config) noexcept
-    : RouDiApp(argc, argv, config)
+IceOryxRouDiApp::IceOryxRouDiApp(const CmdLineParser& cmdLineParser, const RouDiConfig_t& roudiConfig) noexcept
+    : RouDiApp(cmdLineParser, roudiConfig)
 {
 }
 
@@ -31,12 +32,20 @@ void IceOryxRouDiApp::run() noexcept
 {
     if (m_run)
     {
-        static cxx::optional<RouDiMultiProcess> roudi;
-        auto cleaner = cxx::makeScopedStatic(roudi, m_monitoringMode, true, m_config);
+        static cxx::optional<IceOryxRouDiComponents> m_rouDiComponents;
+        auto componentsScopeGuard = cxx::makeScopedStatic(m_rouDiComponents, m_config);
 
-        waitToFinish();
+        /// @todo Rename RouDiMultiProcesss to something sane
+        static cxx::optional<RouDiMultiProcess> roudi;
+        auto roudiScopeGuard = cxx::makeScopedStatic(roudi,
+                                                     m_rouDiComponents.value().m_rouDiMemoryManager,
+                                                     m_rouDiComponents.value().m_portManager,
+                                                     m_monitoringMode,
+                                                     true);
+
+        waitForSignal();
     }
 }
-
 } // namespace roudi
 } // namespace iox
+

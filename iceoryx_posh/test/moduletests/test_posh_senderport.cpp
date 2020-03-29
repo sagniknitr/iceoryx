@@ -14,6 +14,7 @@
 
 #include "iceoryx_posh/iceoryx_posh_types.hpp"
 #include "iceoryx_posh/internal/mepoo/memory_manager.hpp"
+#include "iceoryx_posh/internal/popo/sender_port.hpp"
 #include "iceoryx_posh/internal/popo/receiver_port.hpp"
 #include "iceoryx_posh/internal/popo/sender_port.hpp"
 #include "iceoryx_posh/mepoo/mepoo_config.hpp"
@@ -80,8 +81,7 @@ class SenderPort_testBase : public Test
 
     iox::ReceiverPortType* CreateReceiver(const ServiceDescription& f_service)
     {
-        iox::ReceiverPortType::MemberType_t* data =
-            new iox::ReceiverPortType::MemberType_t(f_service, "", iox::Interfaces::INTERNAL, nullptr);
+        iox::ReceiverPortType::MemberType_t* data = new iox::ReceiverPortType::MemberType_t(f_service, "");
         m_portData.emplace_back(data);
         iox::ReceiverPortType* l_receiver = new iox::ReceiverPortType(data);
         m_ports.emplace_back(l_receiver);
@@ -91,7 +91,7 @@ class SenderPort_testBase : public Test
     iox::SenderPortType* CreateSender(const ServiceDescription& f_service)
     {
         iox::SenderPortType::MemberType_t* data =
-            new iox::SenderPortType::MemberType_t(f_service, &m_memPoolHandler, "", iox::Interfaces::INTERNAL, nullptr);
+            new iox::SenderPortType::MemberType_t(f_service, &m_memPoolHandler, "");
         m_portData.emplace_back(data);
         iox::SenderPortType* l_sender = new iox::SenderPortType(data);
         m_ports.emplace_back(l_sender);
@@ -235,16 +235,16 @@ TEST_F(SenderPort_test, reserveSample_Overflow)
     {
         EXPECT_THAT(samples[i], Ne(nullptr));
     }
-    EXPECT_THAT(m_memPoolHandler.getMemPoolInfo(0).m_usedChunks, Eq(16u));
+    EXPECT_THAT(m_memPoolHandler.getMemPoolInfo(0).m_usedChunks, Eq(iox::MAX_SAMPLE_ALLOCATE_PER_SENDER));
 
 // Allocate one more sample for overflow
 #if defined(NDEBUG)
     auto sample = m_sender->reserveChunk(sizeof(DummySample));
     EXPECT_EQ(sample, nullptr);
-    EXPECT_THAT(m_memPoolHandler.getMemPoolInfo(0).m_usedChunks, Eq(16u));
+    EXPECT_THAT(m_memPoolHandler.getMemPoolInfo(0).m_usedChunks, Eq(iox::MAX_SAMPLE_ALLOCATE_PER_SENDER));
 #else
     ASSERT_DEATH({ m_sender->reserveChunk(sizeof(DummySample)); }, "Application allocates too much chunks");
-    EXPECT_THAT(m_memPoolHandler.getMemPoolInfo(0).m_usedChunks, Eq(16u));
+    EXPECT_THAT(m_memPoolHandler.getMemPoolInfo(0).m_usedChunks, Eq(iox::MAX_SAMPLE_ALLOCATE_PER_SENDER));
 #endif
 }
 
@@ -384,8 +384,8 @@ TEST_F(SenderPort_testLatchedTopic, getSameSampleAfterOneDeliver)
     ASSERT_THAT(m_receiver->getChunk(receivedSample), Eq(true));
     m_receiver->releaseChunk(receivedSample);
 
-    uintptr_t sampleAddress = reinterpret_cast<uintptr_t>(sample);
-    EXPECT_THAT(reinterpret_cast<uintptr_t>(m_sender->reserveChunk(sizeof(DummySample))), Eq(sampleAddress));
+    uint64_t sampleAddress = reinterpret_cast<uint64_t>(sample);
+    EXPECT_THAT(reinterpret_cast<uint64_t>(m_sender->reserveChunk(sizeof(DummySample))), Eq(sampleAddress));
 }
 
 TEST_F(SenderPort_testLatchedTopic, getDifferentSampleWhenStillInUse)
@@ -398,8 +398,8 @@ TEST_F(SenderPort_testLatchedTopic, getDifferentSampleWhenStillInUse)
     const iox::mepoo::ChunkHeader* receivedSample;
     ASSERT_THAT(m_receiver->getChunk(receivedSample), Eq(true));
 
-    uintptr_t sampleAddress = reinterpret_cast<uintptr_t>(sample);
-    EXPECT_THAT(reinterpret_cast<uintptr_t>(m_sender->reserveChunk(sizeof(DummySample))), Ne(sampleAddress));
+    uint64_t sampleAddress = reinterpret_cast<uint64_t>(sample);
+    EXPECT_THAT(reinterpret_cast<uint64_t>(m_sender->reserveChunk(sizeof(DummySample))), Ne(sampleAddress));
     m_receiver->releaseChunk(receivedSample);
 }
 
@@ -422,6 +422,6 @@ TEST_F(SenderPort_testLatchedTopic, getSameSampleAfterSecondDelivery)
     ASSERT_THAT(m_receiver->getChunk(receivedSample), Eq(true));
     m_receiver->releaseChunk(receivedSample);
 
-    uintptr_t sampleAddress = reinterpret_cast<uintptr_t>(sample);
-    EXPECT_THAT(reinterpret_cast<uintptr_t>(m_sender->reserveChunk(sizeof(DummySample))), Eq(sampleAddress));
+    uint64_t sampleAddress = reinterpret_cast<uint64_t>(sample);
+    EXPECT_THAT(reinterpret_cast<uint64_t>(m_sender->reserveChunk(sizeof(DummySample))), Eq(sampleAddress));
 }

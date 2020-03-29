@@ -15,18 +15,17 @@
 #pragma once
 
 #include "iceoryx_utils/cxx/optional.hpp"
+#include "iceoryx_utils/platform/unistd.hpp"
 
 #include <cstdint>
-#include <unistd.h>
 
 namespace iox
 {
 namespace posix
 {
-constexpr uint64_t MaxPageSize = 1024 * 512;
+constexpr uint64_t MaxPageSize = 1024u * 512u;
 
 cxx::optional<uint64_t> pageSize();
 
 } // namespace posix
 } // namespace iox
-

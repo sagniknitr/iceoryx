@@ -18,14 +18,15 @@
 #include "iceoryx_utils/cxx/vector.hpp"
 #include "iceoryx_utils/design_pattern/creation.hpp"
 #include "iceoryx_utils/internal/units/duration.hpp"
+#include "iceoryx_utils/platform/signal.hpp"
+#include "iceoryx_utils/platform/time.hpp"
 
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <ctime>
 #include <limits>
-#include <signal.h>
-#include <sys/time.h>
-#include <time.h>
+
 
 namespace iox
 {
@@ -78,13 +79,13 @@ class Timer
     static constexpr size_t SIZE_OF_SIGVAL_INT = sizeof(int);
     static_assert(SIZE_OF_SIGVAL_INT >= SIZE_OF_COMBINDED_INDEX_AND_DESCRIPTOR, "size of sigval_int is to low");
 
-    static constexpr uint32_t MAX_NUMBER_OF_CALLBACK_HANDLES = 100;
+    static constexpr uint32_t MAX_NUMBER_OF_CALLBACK_HANDLES = 100u;
     static_assert(MAX_NUMBER_OF_CALLBACK_HANDLES <= std::numeric_limits<uint8_t>::max(),
                   "number of callback handles exceeds max index value");
     class OsTimer;
     struct OsTimerCallbackHandle
     {
-        static constexpr uint32_t MAX_DESCRIPTOR_VALUE{(2 ^ 24) - 1};
+        static constexpr uint32_t MAX_DESCRIPTOR_VALUE{(1u << 24u) - 1u};
         static sigval indexAndDescriptorToSigval(uint8_t index, uint32_t descriptor);
         static uint8_t sigvalToIndex(sigval intVal);
         static uint32_t sigvalToDescriptor(sigval intVal);
@@ -172,7 +173,7 @@ class Timer
         /// @brief Identifier for the timer in the operating system
         timer_t m_timerId{INVALID_TIMER_ID};
 
-        uint8_t m_callbackHandleIndex{0};
+        uint8_t m_callbackHandleIndex{0u};
 
         /// @todo will be obsolete with creation pattern
         /// @brief Bool that signals whether the object is fully initalized

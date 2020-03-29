@@ -14,10 +14,12 @@
 
 #include "iceoryx_utils/internal/posix_wrapper/shared_memory_object/shared_memory.hpp"
 #include "iceoryx_utils/cxx/smart_c.hpp"
+#include "iceoryx_utils/platform/fcntl.hpp"
+#include "iceoryx_utils/platform/stat.hpp"
+#include "iceoryx_utils/platform/types.hpp"
+#include "iceoryx_utils/platform/unistd.hpp"
+
 #include <assert.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 namespace iox
 {
@@ -52,24 +54,27 @@ SharedMemory::SharedMemory(const char* f_name,
     , m_size(f_size)
 {
     // on qnx the current working directory will be added to the /dev/shmem path if the leading slash is missing
-    if (f_name == nullptr || strlen(f_name) == 0)
+    if (f_name == nullptr || strlen(f_name) == 0u)
     {
         std::cerr << "No shared memory name specified!" << std::endl;
-        std::terminate();
+        m_isInitialized = false;
+        return;
     }
     else if (f_name[0] != '/')
     {
         std::cerr << "Shared memory name must start with a leading slash!" << std::endl;
-        std::terminate();
+        m_isInitialized = false;
+        return;
     }
 
     if (strlen(f_name) >= NAME_SIZE)
     {
         std::clog << "Shared memory name is too long! '" << f_name << "' will be truncated at position "
-                  << NAME_SIZE - 1 << "!" << std::endl;
+                  << NAME_SIZE - 1u << "!" << std::endl;
     }
 
     strncpy(m_name, f_name, NAME_SIZE);
+    m_name[NAME_SIZE - 1u] = '\0';
     m_oflags |= (f_accessMode == AccessMode::readOnly) ? O_RDONLY : O_RDWR;
     m_oflags |= (f_ownerShip == OwnerShip::mine) ? O_CREAT : 0;
 
@@ -119,7 +124,7 @@ int SharedMemory::getHandle() const
 bool SharedMemory::open()
 {
     // the mask will be applied to the permissions, therefore we need to set it to 0
-    mode_t umaskSaved = umask(0);
+    mode_t umaskSaved = umask(0u);
 
     auto l_shmOpenCall =
         cxx::makeSmartC(shm_open, cxx::ReturnMode::PRE_DEFINED_ERROR_CODE, {-1}, {}, m_name, m_oflags, m_permissions);
@@ -141,9 +146,24 @@ bool SharedMemory::open()
             cxx::makeSmartC(ftruncate, cxx::ReturnMode::PRE_DEFINED_ERROR_CODE, {-1}, {}, m_handle, m_size);
         if (l_truncateCall.hasErrors())
         {
-            std::cerr << "Unable to truncate SharedMemory (ftruncate failed) : " << l_truncateCall.getErrorString()
-                      << std::endl;
-            return false;
+            if (l_truncateCall.getErrNum() == ENOMEM)
+            {
+                char errormsg[] = "\033[0;1;97;41mFatal error:\033[m the available memory is insufficient. Cannot "
+                                  "allocate mempools in shared "
+                                  "memory. Please make sure that enough memory is available. For this, consider also "
+                                  "the memory which is "
+                                  "required for the [/iceoryx_mgmt] segment. Please refer to share/doc/iceoryx/FAQ.md "
+                                  "in your release delivery.";
+
+                std::cerr << errormsg << std::endl;
+                return false;
+            }
+            else
+            {
+                std::cerr << "Unable to truncate SharedMemory (ftruncate failed) : " << l_truncateCall.getErrorString()
+                          << std::endl;
+                return false;
+            }
         }
     }
 
@@ -169,7 +189,8 @@ bool SharedMemory::close()
 {
     if (m_isInitialized)
     {
-        auto closeCall = cxx::makeSmartC(::close, cxx::ReturnMode::PRE_DEFINED_ERROR_CODE, {-1}, {}, m_handle);
+        auto closeCall =
+            cxx::makeSmartC(closePlatformFileHandle, cxx::ReturnMode::PRE_DEFINED_ERROR_CODE, {-1}, {}, m_handle);
         if (closeCall.hasErrors())
         {
             std::cerr << "Unable to close SharedMemory filedescriptor (close failed) : " << closeCall.getErrorString()

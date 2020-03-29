@@ -43,7 +43,7 @@ class ObjectPool
 
 
     Index_t m_freeIndex{0};
-    size_t m_size{0};
+    size_t m_size{0u};
 
     // todo: maybe this metainformation can be combined, e.g. the data pointer == nullptr to indicate that
     // the data is invalid
@@ -384,7 +384,7 @@ class ObjectPool
 
     Index_t pointerToIndex(T* ptr)
     {
-        // todo: not critical, but refactor to use intptr/uintptr_t for pointer arithmetic later
+        /// todo: not critical, but refactor for pointer arithmetic later
         char* p = reinterpret_cast<char*>(ptr);
         if (p < m_first || p > m_last)
         {

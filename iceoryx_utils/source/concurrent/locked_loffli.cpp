@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "iceoryx_utils/internal/concurrent/locked_loffli.hpp"
+#include "iceoryx_utils/platform/platform-correction.hpp"
 
 #include <cassert>
 
@@ -22,26 +23,25 @@ namespace concurrent
 {
 void LockedLoFFLi::init(cxx::not_null<uint32_t*> f_freeIndicesMemory, const uint32_t f_size)
 {
-    cxx::Expects(m_accessMutex.has_value());
-    cxx::Expects(f_size > 0);
+    cxx::Expects(f_size > 0u);
     cxx::Expects(f_size <= UINT32_MAX - 2U);
 
 
     m_freeIndices = f_freeIndicesMemory;
     m_size = f_size;
-    m_invalidIndex = m_size + 1;
+    m_invalidIndex = m_size + 1u;
     if (m_freeIndices != nullptr)
     {
-        for (uint32_t i = 0; i < m_size + 1; i++)
+        for (uint32_t i = 0u; i < m_size + 1u; i++)
         {
-            m_freeIndices[i] = i + 1;
+            m_freeIndices[i] = i + 1u;
         }
     }
 }
 
 bool LockedLoFFLi::pop(uint32_t& index)
 {
-    std::lock_guard<posix::mutex> lock(*m_accessMutex);
+    std::lock_guard<posix::mutex> lock(m_accessMutex);
 
     // we are empty if next points to an element with index of Size
     if (m_head >= m_size)
@@ -58,7 +58,7 @@ bool LockedLoFFLi::pop(uint32_t& index)
 
 bool LockedLoFFLi::push(const uint32_t index)
 {
-    std::lock_guard<posix::mutex> lock(*m_accessMutex);
+    std::lock_guard<posix::mutex> lock(m_accessMutex);
 
     if (index >= m_size || m_freeIndices[index] != m_invalidIndex)
     {

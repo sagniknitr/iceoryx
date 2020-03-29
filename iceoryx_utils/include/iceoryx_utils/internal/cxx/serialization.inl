@@ -105,25 +105,25 @@ inline bool Serialization::deserialize(const std::string& serializedString, T& t
 
 inline bool Serialization::removeFirstEntry(std::string& firstEntry, std::string& remainder) noexcept
 {
-    size_t pos = remainder.find_first_of(separator);
+    uint64_t pos = remainder.find_first_of(separator);
     if (pos == std::string::npos)
     {
         return false;
     }
 
-    size_t length;
+    uint64_t length;
     if (!convert::fromString(remainder.substr(0, pos).c_str(), length))
     {
         return false;
     }
 
-    if (remainder.size() < pos + length + 1)
+    if (remainder.size() < pos + length + 1u)
     {
         return false;
     }
 
-    firstEntry = remainder.substr(pos + 1, length);
-    remainder = remainder.substr(pos + 1 + length);
+    firstEntry = remainder.substr(pos + 1u, length);
+    remainder = remainder.substr(pos + 1u + length);
 
     return true;
 }

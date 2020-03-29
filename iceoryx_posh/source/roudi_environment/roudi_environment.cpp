@@ -23,38 +23,26 @@ namespace iox
 {
 namespace roudi
 {
-RouDiEnvironment::RouDiEnvironment(RouDiMultiProcess* roudiApp)
+RouDiEnvironment::RouDiEnvironment(BaseCTor)
 {
-    iox::log::LogManager::GetLogManager().SetDefaultLogLevel(iox::log::LogLevel::kWarn);
-    m_roudiApp = roudiApp;
+    iox::log::LogManager::GetLogManager().SetDefaultLogLevel(iox::log::LogLevel::kWarn,
+                                                             iox::log::LogLevelOutput::kHideLogLevel);
 }
 
-RouDiEnvironment::RouDiEnvironment(const RouDiConfig_t& roudiConfig, RouDiApp::MonitoringMode monitoringMode)
-    : RouDiEnvironment(new RouDiMultiProcess(monitoringMode, false, roudiConfig))
+RouDiEnvironment::RouDiEnvironment(const RouDiConfig_t& roudiConfig, MonitoringMode monitoringMode)
+    : RouDiEnvironment(BaseCTor::BASE)
 {
+    m_roudiComponents = std::unique_ptr<IceOryxRouDiComponents>(new IceOryxRouDiComponents(roudiConfig));
+    m_roudiApp =
+        std::unique_ptr<RouDiMultiProcess>(new RouDiMultiProcess(m_roudiComponents->m_rouDiMemoryManager,
+                                                                 m_roudiComponents->m_portManager,
+                                                                 monitoringMode,
+                                                                 false));
 }
 
 RouDiEnvironment::~RouDiEnvironment()
 {
-    m_runtimes.cleanupRuntimes();
-    delete m_roudiApp;
-}
-
-RouDiEnvironment::RouDiEnvironment(RouDiEnvironment&& rhs)
-    : m_runtimes(std::move(rhs.m_runtimes))
-{
-    this->m_roudiApp = rhs.m_roudiApp;
-    rhs.m_roudiApp = nullptr;
-    this->m_interOpWaitingTime = rhs.m_interOpWaitingTime;
-}
-RouDiEnvironment& RouDiEnvironment::operator=(RouDiEnvironment&& rhs)
-{
-    m_runtimes = std::move(rhs.m_runtimes);
-    this->m_roudiApp = rhs.m_roudiApp;
-    rhs.m_roudiApp = nullptr;
-    this->m_interOpWaitingTime = rhs.m_interOpWaitingTime;
-
-    return *this;
+    CleanupRuntimes();
 }
 
 void RouDiEnvironment::SetInterOpWaitingTime(const std::chrono::milliseconds& v)
@@ -70,6 +58,11 @@ void RouDiEnvironment::InterOpWait()
 void RouDiEnvironment::CleanupAppResources(const std::string& name)
 {
     m_runtimes.eraseRuntime(name);
+}
+
+void RouDiEnvironment::CleanupRuntimes()
+{
+    m_runtimes.cleanupRuntimes();
 }
 
 } // namespace roudi

@@ -23,6 +23,8 @@
 #include "iceoryx_posh/internal/runtime/message_queue_interface.hpp"
 #include "iceoryx_posh/internal/runtime/runnable_property.hpp"
 #include "iceoryx_posh/internal/runtime/shared_memory_user.hpp"
+#include "iceoryx_posh/runtime/port_config_info.hpp"
+#include "iceoryx_posh/runtime/service_discovery_notifier.hpp"
 #include "iceoryx_utils/fixed_string/string100.hpp"
 
 #include <atomic>
@@ -45,8 +47,6 @@ class RunnableData;
 
 constexpr char DEFAULT_RUNTIME_INSTANCE_NAME[] = "dummy";
 
-using IdString = iox::capro::ServiceDescription::IdString;
-using InstanceContainer = std::vector<IdString>;
 
 /// @brief The runtime that is needed for each application to communicate with the RouDi daemon
 class PoshRuntime
@@ -63,8 +63,26 @@ class PoshRuntime
     /// @brief find all services that match the provided service description
     /// @param[in] serviceDescription service to search for
     /// @param[out] instanceContainer container that is filled with all matching instances
-    void findService(const capro::ServiceDescription& serviceDescription,
-                     InstanceContainer& instanceContainer) noexcept;
+    /// @return cxx::expected<Error> Error, if any, encountered during the operation
+    /// Error::kPOSH__SERVICE_DISCOVERY_INSTANCE_CONTAINER_OVERFLOW : Number of instances can't fit in instanceContainer
+    /// Error::kMQ_INTERFACE__REG_UNABLE_TO_WRITE_TO_ROUDI_MQ : Find Service Request could not be sent to RouDi
+    cxx::expected<Error> findService(const capro::ServiceDescription& serviceDescription,
+                                     InstanceContainer& instanceContainer) noexcept;
+
+    /// @brief register handler, which will be called when the service availability, as specified by
+    /// serviceDescription, changes
+    /// @param[in] handler to be called when the service availability changes
+    /// @param[in] IdString service id
+    /// @return cxx::expected<FindServiceHandle, Error>
+    /// FindServiceHandle -> a handle for this search/find request, which shall be used to stop the availability
+    /// monitoring and related firing of the given handler, in case of success
+    /// Error             -> corresponding Error code, in case of error
+    cxx::expected<FindServiceHandle, Error> startFindService(const FindServiceHandler& handler,
+                                                             const IdString& serviceId) noexcept;
+
+    /// @brief Method to stop finding service request (see above)
+    /// @param[in] handle identifier for the startFindService request
+    void stopFindService(const FindServiceHandle handle) noexcept;
 
     /// @brief offer the provided service, sends the offer from application to RouDi daemon
     /// @param[in] serviceDescription service to offer
@@ -72,47 +90,45 @@ class PoshRuntime
 
     /// @brief stop offering the provided service
     /// @param[in] serviceDescription of the service that shall be no more offered
-    void stopOfferService(const capro::ServiceDescription& f_serviceDescription) noexcept;
+    void stopOfferService(const capro::ServiceDescription& serviceDescription) noexcept;
 
     /// @brief request the RouDi daemon to create a sender port
     /// @param[in] serviceDescription service description for the new sender port
-    /// @param[in] interface interface to which the sender port shall belong
     /// @param[in] runnableName name of the runnable where the sender should belong to
-    /// @return poiner to a created sender port data
+    /// @param[in] portConfigInfo configuration information for the port
+    /// (i.e. what type of port is requested, device where its payload memory is located on etc.)
+    /// @return pointer to a created sender port data
+
     SenderPortType::MemberType_t* getMiddlewareSender(const capro::ServiceDescription& service,
-                                                      const Interfaces interface = Interfaces::INTERNAL,
-                                                      const cxx::CString100& runnableName = "") noexcept;
+                                                      const cxx::CString100& runnableName = cxx::CString100(""),
+                                                      const PortConfigInfo& portConfigInfo = PortConfigInfo()) noexcept;
 
     /// @brief request the RouDi daemon to create a receiver port
     /// @param[in] serviceDescription service description for the new receiver port
-    /// @param[in] interface interface to which the receiver port shall belong
     /// @param[in] runnableName name of the runnable where the receiver should belong to
+    /// @param[in] portConfigInfo configuration information for the port
+    /// (what type of port is requested, device where its payload memory is located on etc.)
     /// @return poiner to a created receiver port data
-    ReceiverPortType::MemberType_t* getMiddlewareReceiver(const capro::ServiceDescription& service,
-                                                          const Interfaces interface = Interfaces::INTERNAL,
-                                                          const cxx::CString100& runnableName = "") noexcept;
+    ReceiverPortType::MemberType_t*
+    getMiddlewareReceiver(const capro::ServiceDescription& service,
+                          const cxx::CString100& runnableName = cxx::CString100(""),
+                          const PortConfigInfo& portConfigInfo = PortConfigInfo()) noexcept;
 
     /// @brief request the RouDi daemon to create an interface port
     /// @param[in] interface interface to create
     /// @param[in] runnableName name of the runnable where the interface should belong to
     /// @return poiner to a created interface port data
-    popo::InterfacePortData* getMiddlewareInterface(const Interfaces interface,
-                                                    const cxx::CString100& runnableName = "") noexcept;
+    popo::InterfacePortData* getMiddlewareInterface(const capro::Interfaces interface,
+                                                    const cxx::CString100& runnableName = cxx::CString100("")) noexcept;
 
     /// @brief request the RouDi daemon to create an application port
-    /// @param[in] interface to which the application port shall belong
     /// @return poiner to a created application port data
-    popo::ApplicationPortData* getMiddlewareApplication(const Interfaces interface) noexcept;
+    popo::ApplicationPortData* getMiddlewareApplication() noexcept;
 
     /// @brief request the RouDi daemon to create a runnable
     /// @param[in] runnableProperty class which contains all properties which the runnable should have
     /// @return pointer to the data of the runnable
     RunnableData* createRunnable(const RunnableProperty& runnableProperty) noexcept;
-
-    /// @brief request the RouDi daemon to remove a runnable
-    /// @param[in] runnable runnable which should be removed
-    /// @return true if the remove was successful, otherwise false
-    void removeRunnable(const Runnable& runnable) noexcept;
 
     /// @brief requests the serviceRegistryChangeCounter from the shared memory
     /// @return pointer to the serviceRegistryChangeCounter
@@ -135,6 +151,7 @@ class PoshRuntime
     PoshRuntime& operator=(const PoshRuntime&) = delete;
     PoshRuntime(PoshRuntime&&) = delete;
     PoshRuntime& operator=(PoshRuntime&&) = delete;
+    virtual ~PoshRuntime() noexcept;
 
     friend class roudi::RuntimeTestInterface;
 
@@ -146,9 +163,13 @@ class PoshRuntime
     static PoshRuntime& defaultRuntimeFactory(const std::string& name) noexcept;
 
   private:
-    SenderPortType::MemberType_t* requestSenderFromRoudi(const MqMessage& sendBuffer) noexcept;
+    cxx::expected<SenderPortType::MemberType_t*, MqMessageErrorType>
+    requestSenderFromRoudi(const MqMessage& sendBuffer) noexcept;
+
     ReceiverPortType::MemberType_t* requestReceiverFromRoudi(const MqMessage& sendBuffer) noexcept;
 
+    /// @brief checks the given application name for certain constraints like length(100 chars) or leading slash
+    /// @todo replace length check with fixedstring when its integrated
     const std::string& verifyInstanceName(const std::string& name) noexcept;
 
     const std::string m_appName;
@@ -162,9 +183,13 @@ class PoshRuntime
 
     void sendKeepAlive() noexcept;
     static_assert(PROCESS_KEEP_ALIVE_INTERVAL > DISCOVERY_INTERVAL, "Keep alive interval too small");
+
+    ServiceDiscoveryNotifier m_serviceDiscoveryNotifier;
+
     /// @note the m_keepAliveTimer should always be the last member, so that it will be the first member to be detroyed
     iox::posix::Timer m_keepAliveTimer{PROCESS_KEEP_ALIVE_INTERVAL, [&]() { this->sendKeepAlive(); }};
 };
 
 } // namespace runtime
 } // namespace iox
+

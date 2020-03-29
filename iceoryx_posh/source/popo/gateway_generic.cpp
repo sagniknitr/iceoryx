@@ -21,9 +21,17 @@ namespace iox
 {
 namespace popo
 {
-GatewayGeneric::GatewayGeneric(const Interfaces f_interface) noexcept
+GatewayGeneric::GatewayGeneric(const capro::Interfaces f_interface) noexcept
     : m_interfaceImpl(runtime::PoshRuntime::getInstance().getMiddlewareInterface(f_interface))
 {
+}
+
+GatewayGeneric::~GatewayGeneric() noexcept
+{
+    if(m_interfaceImpl)
+    {
+        m_interfaceImpl.destroy();
+    }
 }
 
 bool GatewayGeneric::getCaProMessage(CaproMessage& msg) noexcept

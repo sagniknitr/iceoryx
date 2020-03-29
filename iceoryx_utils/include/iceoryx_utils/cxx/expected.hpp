@@ -145,6 +145,18 @@ class expected<ErrorType>
     ///         or the error value - depending on what is stored in the expected
     expected(expected&&) = default;
 
+#if defined(_WIN32)
+    /// @brief copy conversion constructor to convert an expected which contains value and
+    ///        error type to an expected which contains only an error
+    template <typename ValueType>
+    expected(const expected<ValueType, ErrorType>& rhs) noexcept;
+
+    /// @brief move conversion constructor to convert an expected which contains value and
+    ///        error type to an expected which contains only an error
+    template <typename ValueType>
+    expected(expected<ValueType, ErrorType>&& rhs) noexcept;
+#endif
+
     /// @brief calls the destructor of the success value or error value - depending on what
     ///         is stored in the expected
     ~expected() = default;
@@ -156,6 +168,18 @@ class expected<ErrorType>
     /// @brief  calls the move assignment operator of the contained success value
     ///         or the error value - depending on what is stored in the expected
     expected& operator=(expected&&) = default;
+
+#if defined(_WIN32)
+    /// @brief  calls the copy assignment operator of the contained success value
+    ///         or the error value - depending on what is stored in the expected
+    template <typename ValueType>
+    expected& operator=(const expected<ValueType, ErrorType>& rhs) noexcept;
+
+    /// @brief  calls the move assignment operator of the contained success value
+    ///         or the error value - depending on what is stored in the expected
+    template <typename ValueType>
+    expected& operator=(expected<ValueType, ErrorType>&& rhs) noexcept;
+#endif
 
     /// @brief  constructs an expected which is signaling success
     /// @param[in] successValue value which will be stored in the expected
@@ -181,6 +205,10 @@ class expected<ErrorType>
     /// @return expected signalling error
     template <typename... Targs>
     static expected create_error(Targs&&... args) noexcept;
+
+    /// @brief  returns true if the expected contains an error otherwise false
+    /// @return bool which contains true if the expected contains an error
+    explicit operator bool() const noexcept;
 
     /// @brief  returns true if the expected contains an error otherwise false
     /// @return bool which contains true if the expected contains an error
@@ -364,6 +392,10 @@ class expected<ValueType, ErrorType>
     /// @return expected signalling error
     template <typename... Targs>
     static expected create_error(Targs&&... args) noexcept;
+
+    /// @brief  returns true if the expected contains an error otherwise false
+    /// @return bool which contains true if the expected contains an error
+    explicit operator bool() const noexcept;
 
     /// @brief  returns true if the expected contains an error otherwise false
     /// @return bool which contains true if the expected contains an error

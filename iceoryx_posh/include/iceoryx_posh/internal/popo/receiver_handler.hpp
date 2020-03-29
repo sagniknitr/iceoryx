@@ -35,7 +35,7 @@ class ThreadSafe
     void unlock();
 
   private:
-    cxx::optional<mutex_t> m_mutex = mutex_t::CreateMutex(true); // recursive lock
+    mutex_t m_mutex{true}; // recursive lock
 };
 
 class SingleThreaded
@@ -101,7 +101,6 @@ class ReceiverHandler : public LockingPolicy
         return RouDiContext(*this);
     }
 
-    void deliverChunk(const mepoo::SharedChunk f_chunk);
     void updateLastChunk(const mepoo::SharedChunk f_chunk);
     /// checks for a sample for delivering on subscription
     /// @return true if there is a valid sample for delivering on subscription

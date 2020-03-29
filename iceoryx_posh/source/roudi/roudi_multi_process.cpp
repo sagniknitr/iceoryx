@@ -16,6 +16,8 @@
 #include "iceoryx_posh/internal/runtime/message_queue_interface.hpp"
 #include "iceoryx_posh/internal/runtime/runnable_property.hpp"
 #include "iceoryx_posh/roudi/introspection_types.hpp"
+#include "iceoryx_posh/roudi/memory/roudi_memory_manager.hpp"
+#include "iceoryx_posh/runtime/port_config_info.hpp"
 #include "iceoryx_utils/cxx/convert.hpp"
 #include "iceoryx_utils/fixed_string/string100.hpp"
 #include "iceoryx_utils/posix_wrapper/timer.hpp"
@@ -24,26 +26,29 @@ namespace iox
 {
 namespace roudi
 {
-RouDiMultiProcess::RouDiMultiProcess(RouDiApp::MonitoringMode monitoringMode,
-                                     const bool killProcessesInDestructor,
-                                     const RouDiConfig_t config)
+RouDiMultiProcess::RouDiMultiProcess(RouDiMemoryInterface& roudiMemoryInterface,
+                                     PortManager& portManager,
+                                     const MonitoringMode monitoringMode,
+                                     const bool killProcessesInDestructor)
     : m_killProcessesInDestructor(killProcessesInDestructor)
     , m_runThreads(true)
-    , m_roudilock()
-    , m_cleanupBeforeStart(cleanupBeforeStart())
-    , m_shmMgr(config)
-    , m_prcMgr(m_shmMgr)
-    , m_mempoolIntrospection(
-          m_shmMgr.getShmInterface().getShmInterface()->m_roudiMemoryManager,
-          m_shmMgr.getShmInterface().getShmInterface()->m_segmentManager,
-          m_prcMgr.addIntrospectionSenderPort(IntrospectionMempoolService, MEMPOOL_INTROSPECTION_MQ_APP_NAME))
+    , m_roudiMemoryInterface(&roudiMemoryInterface)
+    , m_portManager(&portManager)
+    , m_prcMgr(*m_roudiMemoryInterface, portManager)
+    , m_mempoolIntrospection(*m_roudiMemoryInterface->introspectionMemoryManager()
+                                  .value(), /// @todo create a RouDiMemoryManagerData struct with all the pointer
+                             *m_roudiMemoryInterface->segmentManager().value(),
+                             m_prcMgr.addIntrospectionSenderPort(IntrospectionMempoolService, MQ_ROUDI_NAME))
     , m_monitoringMode(monitoringMode)
 {
     m_processIntrospection.registerSenderPort(
-        m_prcMgr.addIntrospectionSenderPort(IntrospectionProcessService, PROCESS_INTROSPECTION_MQ_APP_NAME));
+        m_prcMgr.addIntrospectionSenderPort(IntrospectionProcessService, MQ_ROUDI_NAME));
     m_prcMgr.initIntrospection(&m_processIntrospection);
     m_processIntrospection.run();
     m_mempoolIntrospection.start();
+
+    // since RouDi offers the introspection services, also add it to the list of processes
+    m_processIntrospection.addProcess(getpid(), MQ_ROUDI_NAME);
 
     // run the threads
     m_processManagementThread = std::thread(&RouDiMultiProcess::processThread, this);
@@ -51,15 +56,6 @@ RouDiMultiProcess::RouDiMultiProcess(RouDiApp::MonitoringMode monitoringMode,
 
     m_processMQThread = std::thread(&RouDiMultiProcess::mqThread, this);
     pthread_setname_np(m_processMQThread.native_handle(), "MQ-processing");
-
-#ifdef PRINT_MEMORY_CONSUMPTION
-    INFO_PRINTF("-----------------------\n");
-    INFO_PRINTF("Static Sizes [kB]:\n");
-    INFO_PRINTF("* RouDiMultiProcess ~ %d kB\n", (int)((sizeof(RouDiMultiProcess) / 1024.) + .5));
-    INFO_PRINTF("* SharedMemoryManager    ~ %6d kB\n", (int)((sizeof(SharedMemoryManager) / 1024.) + .5));
-    INFO_PRINTF("* ProcessManager    ~ %6d kB\n", (int)((sizeof(ProcessManager) / 1024.) + .5));
-    INFO_PRINTF("-----------------------\n");
-#endif
 }
 
 RouDiMultiProcess::~RouDiMultiProcess()
@@ -70,7 +66,7 @@ RouDiMultiProcess::~RouDiMultiProcess()
 void RouDiMultiProcess::shutdown()
 {
     m_processIntrospection.stop();
-    m_shmMgr.stopPortIntrospection();
+    m_portManager->stopPortIntrospection();
     // roudi will exit soon, stopping all threads
     m_runThreads = false;
 
@@ -117,7 +113,7 @@ void RouDiMultiProcess::mqThread()
         runtime::MqMessage message;
         /// @todo do we really need timedReceive? an alternative solution would be to close the message queue,
         /// which also results in a return from mq_receive, and check the relevant errno and shutdown RouDi
-        if (!roudiMqInterface.timedReceive(m_MessageQueueTimeoutMilliseconds, message))
+        if (!roudiMqInterface.timedReceive(m_messageQueueTimeout, message))
         {
             // TODO: errorHandling
         }
@@ -168,7 +164,7 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
 
             parseRegisterMessage(message, pid, userId, transmissionTimestamp);
 
-            registerProcess(processName, pid, {userId}, transmissionTimestamp);
+            registerProcess(processName, pid, {userId}, transmissionTimestamp, getUniqueSessionIdForProcess());
         }
         break;
     }
@@ -182,9 +178,12 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
         else
         {
             capro::ServiceDescription service(cxx::Serialization(message.getElementAtIndex(2)));
-            Interfaces interface = StringToEInterfaces(message.getElementAtIndex(3));
+            cxx::Serialization portConfigInfoSerialization(message.getElementAtIndex(4));
 
-            m_prcMgr.addSenderForProcess(processName, service, interface, message.getElementAtIndex(4));
+            m_prcMgr.addSenderForProcess(processName,
+                                         service,
+                                         message.getElementAtIndex(3),
+                                         iox::runtime::PortConfigInfo(portConfigInfoSerialization));
         }
         break;
     }
@@ -198,9 +197,12 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
         else
         {
             capro::ServiceDescription service(cxx::Serialization(message.getElementAtIndex(2)));
-            Interfaces interface = StringToEInterfaces(message.getElementAtIndex(3));
+            cxx::Serialization portConfigInfoSerialization(message.getElementAtIndex(4));
 
-            m_prcMgr.addReceiverForProcess(processName, service, interface, message.getElementAtIndex(4));
+            m_prcMgr.addReceiverForProcess(processName,
+                                           service,
+                                           message.getElementAtIndex(3),
+                                           iox::runtime::PortConfigInfo(portConfigInfoSerialization));
         }
         break;
     }
@@ -213,7 +215,7 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
         }
         else
         {
-            Interfaces interface = StringToEInterfaces(message.getElementAtIndex(2));
+            capro::Interfaces interface = StringToEInterfaces(message.getElementAtIndex(2));
 
             m_prcMgr.addInterfaceForProcess(processName, interface, message.getElementAtIndex(3));
         }
@@ -221,16 +223,14 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
     }
     case runtime::MqMessageType::IMPL_APPLICATION:
     {
-        if (message.getNumberOfElements() != 3)
+        if (message.getNumberOfElements() != 2)
         {
             ERR_PRINTF("Wrong number of parameter for \"MqMessageType::IMPL_APPLICATION\" from \"%s\"received!\n",
                        processName.c_str());
         }
         else
         {
-            Interfaces interface = StringToEInterfaces(message.getElementAtIndex(2));
-
-            m_prcMgr.addApplicationForProcess(processName, interface);
+            m_prcMgr.addApplicationForProcess(processName);
         }
         break;
     }
@@ -245,19 +245,6 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
         {
             runtime::RunnableProperty runnableProperty(message.getElementAtIndex(2));
             m_prcMgr.addRunnableForProcess(processName, runnableProperty.m_name);
-        }
-        break;
-    }
-    case runtime::MqMessageType::REMOVE_RUNNABLE:
-    {
-        if (message.getNumberOfElements() != 3)
-        {
-            ERR_PRINTF("Wrong number of parameter for \"MqMessageType::REMOVE_RUNNABLE\" from \"%s\"received!\n",
-                       processName.c_str());
-        }
-        else
-        {
-            m_prcMgr.removeRunnableForProcess(processName, message.getElementAtIndex(2));
         }
         break;
     }
@@ -291,23 +278,18 @@ void RouDiMultiProcess::processMessage(const runtime::MqMessage& message,
     }
 }
 
-bool RouDiMultiProcess::registerProcess(const std::string& name,
-                                        int pid,
-                                        posix::PosixUser user,
-                                        int64_t transmissionTimestamp)
+bool RouDiMultiProcess::registerProcess(
+    const std::string& name, int pid, posix::PosixUser user, int64_t transmissionTimestamp, const uint64_t sessionId)
 {
-    bool monitorProcess = (m_monitoringMode == RouDiApp::MonitoringMode::ON);
+    bool monitorProcess = (m_monitoringMode == MonitoringMode::ON);
 
-    return m_prcMgr.registerProcess(name, pid, user, monitorProcess, transmissionTimestamp);
+    return m_prcMgr.registerProcess(name, pid, user, monitorProcess, transmissionTimestamp, sessionId);
 }
 
-bool RouDiMultiProcess::cleanupBeforeStart()
+uint64_t RouDiMultiProcess::getUniqueSessionIdForProcess()
 {
-    // this temporary object will create a roudi mqueue and close it immediatelly
-    // if there was an outdated roudi message queue, it will be cleaned up
-    // if there is an outdated mqueue, the start of the apps will be terminated
-    runtime::MqBase::cleanupOutdatedMessageQueue(MQ_ROUDI_NAME);
-    return true;
+    static uint64_t sessionId = 0;
+    return ++sessionId;
 }
 
 void RouDiMultiProcess::mqMessageErrorHandler()

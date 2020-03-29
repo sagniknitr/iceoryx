@@ -25,7 +25,7 @@ The project maintains the following source code repositories
 
 ## Eclipse Contributor Agreement
 
-Before your contribution can be accepted by the project team contributors must
+Before your contribution can be accepted by the project team, contributors must
 electronically sign the Eclipse Contributor Agreement (ECA).
 
 * http://www.eclipse.org/legal/ECA.php
@@ -48,22 +48,23 @@ Contact the project developers via the project's "dev" list.
 ## Feature request and bugs
 
 We love pull requests! The next sections try to cover most of the relevant questions. For larger contributions or
-architectural changes we'd kindly ask you to get in touch with one of the maintainers beforehand. If you would like to
+architectural changes, we'd kindly ask you to get in touch with one of the maintainers beforehand. If you would like to
 report a bug or propose a new feature, please raise an issue before raising a pull request. This makes it easier to
-track. Beforehand, please make sure you have:
+track. Please make sure you have:
 
 1. Signed the [ECA](http://www.eclipse.org/legal/ECA.php)
 2. All commits have been commited with `git commit -s`
+3. You open your pull request towards the base branch `staging`
 
 ## Coding style
 
 We love the [C++ core guidelines](http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines). If in doubt please try
-to follow them as well as our unwritten conventions in the exisiting parts of the code base.
+to follow them as well as our unwritten conventions in the existing parts of the code base.
 Please format your code with the provided [clang-format](https://clang.llvm.org/docs/ClangFormat.html) and
 [clang-tidy](https://clang.llvm.org/extra/clang-tidy/) before raising a pull request. Lots of IDEs do read the
 clang-format file these days.
 
-We created some convenient rules to highlite some bits that you might not be used to in other FOSS projects. They are
+We created some convenient rules to highlight some bits that you might not be used to in other FOSS projects. They are
 helpful to build embedded systems for safety fields like automotive or avionics. It is possible that not the whole
 codebase follows these rules, things are work in progress.
 
@@ -124,7 +125,7 @@ with the version 1.8.1.
 
 ### Unit tests (aka module tests)
 
-Units tests are black box tests, that test the public interface of a class. They are required for all new code.
+Unit tests are black box tests that test the public interface of a class. They are required for all new code.
 
 ### Integration tests
 
@@ -142,20 +143,38 @@ your code as portable as possible. Currently our focus is [QNX](https://blackber
 
 * [ncurses](https://www.gnu.org/software/ncurses/)
 
-### Safety
+### Safety & security
 
 We aim for [ASIL-D](https://en.wikipedia.org/wiki/Automotive_Safety_Integrity_Level#ASIL_D) compliance. The
 [ISO262](https://en.wikipedia.org/wiki/ISO_26262) is also a good read-up if you want to learn more about automotive
-safety. As of now we don't have any continous integration checks implemented but will rely on reviews during the pull
-requests.
+safety. A nice introduction [video](https://www.youtube.com/watch?v=F4GzsA00s5I) was presented on CppCon 2019.
 
-### Security
+We have a partnership with [Perforce](https://www.perforce.com) and use
+[Helix QAC++ 2019.2](https://www.perforce.com/products/helix-qac) to perform a static-code analysis.
 
-A good read-up on security topics with C++ is the
-[SEI CERT C++ Coding Standard](https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=88046682). If you are
-unsure you can always read-up there and use it as best practise. It is possible that not the whole codebase follows
-these rules, things are work in progress. But this is where we want go. As of now we don't have any continous
-integration checks implemented but will rely on reviews during the pull requests.
+Github [labels](https://github.com/eclipse/iceoryx/labels) are used to group issues into the rulesets:
+
+| Ruleset name | Github issue label |
+|---|---|
+| [MISRA](https://www.misra.org.uk/) C++ 2008 | MISRA |
+| [Adaptive AUTOSAR](https://www.autosar.org/fileadmin/user_upload/standards/adaptive/17-03/AUTOSAR_RS_CPP14Guidelines.pdf) C++14 | AUTOSAR |
+| [SEI CERT C++](https://wiki.sei.cmu.edu/confluence/pages/viewpage.action?pageId=88046682) 2016 Coding Standard | CERT |
+
+If one of the rules is not followed, a rationale is added in the following manner:
+
+    /// @rationale
+    /// Short description why
+    *mynullptr = foo; // PRQA S 4242
+
+Don't be afraid if you don't have Helix QAC++ available. As we want to make it easy for developers to contribute,
+please use the ``staging`` branch and we'll run the QAC++ scan and get back to you.
+
+Results will be available on this [Helix QAC dashboard](https://qaverify.programmingresearch.com/). Please contact us, if
+you're interested in getting access.
+
+It is possible that not the whole codebase follows these rules, things are work in progress. But this is where we want
+go. As of now we don't have any continous integration checks implemented but will rely on reviews during the pull
+requests. We're planning to introduce continous integration checks in the near future.
 
 ### Header
 

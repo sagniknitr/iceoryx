@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "iceoryx_utils/internal/units/duration.hpp"
+#include "iceoryx_utils/platform/platform-correction.hpp"
 
 namespace iox
 {
@@ -20,11 +21,12 @@ namespace units
 {
 struct timespec Duration::timespec(const TimeSpecReference& reference) const
 {
-    switch (reference)
+    if (reference == TimeSpecReference::None)
     {
-    case TimeSpecReference::None:
-        return {this->seconds<long>(), this->nanoSeconds<long>() - this->seconds<long>() * 1000000000};
-    default:
+        return {this->seconds<int32_t>(),
+                static_cast<int32_t>(this->nanoSeconds<int64_t>() - this->seconds<int64_t>() * 1000000000)};
+    }
+    else
     {
         struct timespec referenceTime;
         auto result = cxx::makeSmartC(clock_gettime,
@@ -47,7 +49,6 @@ struct timespec Duration::timespec(const TimeSpecReference& reference) const
 
             return {seconds, nanoSeconds};
         }
-    }
     }
 }
 

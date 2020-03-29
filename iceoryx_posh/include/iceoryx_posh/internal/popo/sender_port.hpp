@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "iceoryx_posh/internal/popo/base_port.hpp"
 #include "iceoryx_posh/internal/popo/sender_port_data.hpp"
 
 #include <cstdint>
@@ -26,6 +27,7 @@ class SenderPort : public BasePort
 {
   public:
     using MemberType_t = SenderPortData;
+    using MemoryInfo = iox::mepoo::MemoryInfo;
 
     SenderPort(SenderPortData* const member);
 
@@ -51,10 +53,12 @@ class SenderPort : public BasePort
     void enableDoDeliverOnSubscription();
     bool doesDeliverOnSubscribe() const;
     bool isPortActive() const;
+    bool isUnique() const;
     uint32_t getMaxDeliveryFiFoCapacity();
 
   protected:
     virtual bool connectReceiverPort(ReceiverPortType::MemberType_t* const receiver);
+    virtual void deliverChunkToAllReceiver(const mepoo::SharedChunk f_chunk);
 
   private:
     bool hasValidService(const capro::CaproMessage& caproMessage);
@@ -69,9 +73,14 @@ class SenderPort : public BasePort
     bool deleteFromAllocatedChunkContainer(mepoo::ChunkHeader* chunkHeader);
     void clearAllocatedChunkContainer();
 
-    const MemberType_t* getMembers() const;
-    MemberType_t* getMembers();
+    const MemoryInfo& getMemoryInfo() const noexcept;
+
+    const MemberType_t* getMembers() const noexcept;
+    MemberType_t* getMembers() noexcept;
 };
 
 } // namespace popo
 } // namespace iox
+
+#include "iceoryx_posh/internal/popo/sender_port.inl"
+

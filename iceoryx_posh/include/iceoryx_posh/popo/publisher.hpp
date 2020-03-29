@@ -17,6 +17,7 @@
 #include "iceoryx_posh/capro/service_description.hpp"
 #include "iceoryx_posh/internal/popo/sender_port.hpp"
 #include "iceoryx_posh/mepoo/chunk_header.hpp"
+#include "iceoryx_posh/runtime/posh_runtime.hpp"
 #include "iceoryx_utils/fixed_string/string100.hpp"
 
 #include <memory>
@@ -25,28 +26,30 @@ namespace iox
 {
 namespace popo
 {
-
-class Publisher
+template <typename SenderPortType>
+class Publisher_t
 {
   public:
     /// @brief Constructor
     /// @param[in] service Information on service , service, instance, event Id
     /// @param[in] runnableName optional name of the runnable the publisher belongs to
-    Publisher(const capro::ServiceDescription& service, const cxx::CString100& runnableName = "") noexcept;
+    Publisher_t(const capro::ServiceDescription& service,
+                const cxx::CString100& runnableName = cxx::CString100("")) noexcept;
 
-    Publisher& operator=(const Publisher& other) = delete;
-    Publisher(const Publisher& other) = delete;
+    Publisher_t& operator=(const Publisher_t& other) = delete;
+    Publisher_t(const Publisher_t& other) = delete;
 
-    Publisher& operator=(Publisher&&) = default;
-    Publisher(Publisher&& other) = default;
+    Publisher_t& operator=(Publisher_t&&) = default;
+    Publisher_t(Publisher_t&& other) = default;
 
-    virtual ~Publisher() noexcept = default;
+    virtual ~Publisher_t() noexcept;
 
     /// @brief Allocate memory for the chunk to be sent
     /// @param[in] payloadSize size of shared memory to be allocated
     /// @param[in] useDynamicPayloadSizes bool value of using dynamic payload size
     /// @return Information about the chunk reserved
-    virtual mepoo::ChunkHeader* allocateChunkWithHeader(uint32_t payloadSize, bool useDynamicPayloadSizes = false) noexcept;
+    virtual mepoo::ChunkHeader* allocateChunkWithHeader(uint32_t payloadSize,
+                                                        bool useDynamicPayloadSizes = false) noexcept;
 
     /// @brief Allocate memory for chunk to be sent
     /// @param[in] payloadSize size of shared memory to be allocated
@@ -66,7 +69,8 @@ class Publisher
     /// @param[in] chunkHeader Information of the chunk to be removed.
     virtual void freeChunk(mepoo::ChunkHeader* const chunkHeader) noexcept;
 
-    /// @brief Function for converting payload information to ChunkHeader , deleting particular chunk from chunkcontainer
+    /// @brief Function for converting payload information to ChunkHeader , deleting particular chunk from
+    /// chunkcontainer
     /// @param[in] payload payload of the chunk to be removed.
     virtual void freeChunk(void* const payload) noexcept;
 
@@ -89,12 +93,25 @@ class Publisher
 
   protected:
     // needed for unit testing
-    Publisher() noexcept;
+    Publisher_t() noexcept;
 
   protected:
     SenderPortType m_sender{nullptr};
     void* m_lastSample{nullptr};
 };
 
+// Default Publisher
+class Publisher : public Publisher_t<iox::popo::SenderPort>
+{
+  public:
+    Publisher(const capro::ServiceDescription& service,
+              const cxx::CString100& runnableName = cxx::CString100("")) noexcept
+        : Publisher_t<iox::popo::SenderPort>(service, runnableName)
+    {
+    }
+};
+
 } // namespace popo
 } // namespace iox
+
+#include "iceoryx_posh/internal/popo/publisher.inl"

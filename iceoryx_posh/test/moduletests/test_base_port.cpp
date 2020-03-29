@@ -45,27 +45,26 @@ BasePort* CreateCaProPort()
 
 BasePort* CreateSenderPort()
 {
-    SenderPortData* senderPortData =
-        new SenderPortData(m_servicedesc, nullptr, "SendPort", iox::Interfaces::INTERNAL, nullptr);
+    SenderPortData* senderPortData = new SenderPortData(m_servicedesc, nullptr, "SendPort");
     return new SenderPort(senderPortData);
 }
 
 BasePort* CreateReceiverPort()
 {
-    ReceiverPortData* receiverPortData =
-        new ReceiverPortData(m_servicedesc, "RecPort", iox::Interfaces::INTERNAL, nullptr);
+    ReceiverPortData* receiverPortData = new ReceiverPortData(m_servicedesc, "RecPort");
     return new ReceiverPort(receiverPortData);
 }
 
 BasePort* CreateInterfacePort()
 {
-    InterfacePortData* interfacePortData = new InterfacePortData("InterfacePort", iox::Interfaces::INTERNAL, nullptr);
+    InterfacePortData* interfacePortData =
+        new InterfacePortData("InterfacePort", iox::capro::Interfaces::INTERNAL);
     return new InterfacePort(interfacePortData);
 }
 
 BasePort* CreateApplicationPort()
 {
-    ApplicationPortData* applicationPortData = new ApplicationPortData("AppPort", iox::Interfaces::INTERNAL);
+    ApplicationPortData* applicationPortData = new ApplicationPortData("AppPort");
     return new ApplicationPort(applicationPortData);
 }
 
@@ -232,7 +231,10 @@ TEST_P(BasePortParamtest, getApplicationname)
     }
 }
 
-INSTANTIATE_TEST_CASE_P(
-    CaPro,
-    BasePortParamtest,
-    Values(&CreateCaProPort, &CreateReceiverPort, &CreateSenderPort, &CreateInterfacePort, &CreateApplicationPort));
+INSTANTIATE_TEST_CASE_P(CaPro,
+                        BasePortParamtest,
+                        Values(&CreateCaProPort,
+                               &CreateReceiverPort,
+                               &CreateSenderPort,
+                               &CreateInterfacePort,
+                               &CreateApplicationPort));

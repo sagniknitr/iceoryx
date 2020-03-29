@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.5)
-set(iceoryx_introspection_VERSION 0.16.0)
+set(iceoryx_introspection_VERSION 0.16.1)
 project(iceoryx_introspection VERSION ${iceoryx_introspection_VERSION})
 
 find_package(iceoryx_posh REQUIRED)
@@ -54,6 +54,13 @@ target_link_libraries(iceoryx_introspection
     iceoryx_posh::iceoryx_posh
     ncurses
 )
+
+# Don't link tinfo under QNX
+if(NOT CMAKE_SYSTEM_NAME MATCHES QNX)
+    target_link_libraries(iceoryx_introspection
+        tinfo
+    )
+endif()
 
 set_target_properties(iceoryx_introspection
     PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"

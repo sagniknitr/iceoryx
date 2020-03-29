@@ -16,6 +16,8 @@
 
 #include "iceoryx_utils/cxx/types.hpp"
 
+#include <functional>
+#include <new> // needed for placement new in the construct_value member function
 #include <utility>
 
 namespace iox
@@ -202,6 +204,28 @@ class optional
     ///         a copy of default_value
     template <typename U>
     constexpr T value_or(U&& default_value) const noexcept;
+
+    /// @brief calls the provided callable with the optional value as arguments
+    ///         if the optional contains a value
+    /// @param[in] callable which has T as argument
+    /// @return reference to this
+    optional& and_then(const std::function<void(T&)>& callable) noexcept;
+
+    /// @brief calls the provided callable with the optional value as arguments
+    ///         if the optional contains a value
+    /// @param[in] callable which has T as argument
+    /// @return reference to this
+    const optional& and_then(const std::function<void(const T&)>& callable) const noexcept;
+
+    /// @brief calls the provided callable if the optional does not contain a value
+    /// @param[in] callable
+    /// @return reference to this
+    optional& or_else(const std::function<void()>& callable) noexcept;
+
+    /// @brief calls the provided callable if the optional does not contain a value
+    /// @param[in] callable
+    /// @return reference to this
+    const optional& or_else(const std::function<void()>& callable) const noexcept;
 
   private:
     alignas(alignof(T)) byte_t m_data[sizeof(T)];

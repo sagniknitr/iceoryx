@@ -44,20 +44,22 @@ enum class CaproMessageType : uint8_t
     PONG,
     MESSGAGE_TYPE_END
 };
+
 constexpr int32_t MAX_ENUM_STRING_SIZE = 64;
-constexpr char CaproMessageTypeString[][MAX_ENUM_STRING_SIZE] = {{"NOTYPE"},
-                                                                 {"FIND"},
-                                                                 {"OFFER"},
-                                                                 {"STOP_OFFER"},
-                                                                 {"SUB"},
-                                                                 {"UNSUB"},
-                                                                 {"ACK"},
-                                                                 {"NACK"},
-                                                                 {"PUB"},
-                                                                 {"REQ"},
-                                                                 {"RES"},
-                                                                 {"PING"},
-                                                                 {"PONG"}};
+constexpr char CaproMessageTypeString[][MAX_ENUM_STRING_SIZE] = {"NOTYPE",
+                                                                 "FIND",
+                                                                 "OFFER",
+                                                                 "STOP_OFFER",
+                                                                 "SUB",
+                                                                 "UNSUB",
+                                                                 "ACK",
+                                                                 "NACK",
+                                                                 "PUB",
+                                                                 "REQ",
+                                                                 "RES",
+                                                                 "PING",
+                                                                 "PONG"};
+
 
 enum class CaproMessageSubType : uint8_t
 {
@@ -90,7 +92,7 @@ class CaproMessage
     CaproMessageType m_type{CaproMessageType::NOTYPE};
     CaproMessageSubType m_subType{CaproMessageSubType::NOSUBTYPE};
     ServiceDescription m_serviceDescription;
-    /// @brief Null-Pointer for request-port with no spedific type
+    /// @brief Null-Pointer for request-port with no specific type
     popo::ReceiverPortData* m_requestPort{nullptr};
 };
 
